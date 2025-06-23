@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
+import { useEffect } from "react";
+import { auth } from "@/firebaseConfig"; // Adjust the import based on your project structure
 import {
   Sparkles,
   Check,
@@ -30,52 +32,52 @@ interface RecommendedTasksProps {
   onTaskAccepted: (task: RecommendedTask) => void;
 }
 
-const mockRecommendations: RecommendedTask[] = [
-  {
-    id: "rec-1",
-    title: "Apply to Microsoft Senior Developer role",
-    description:
-      "High-match position based on your React and TypeScript skills. Application deadline in 3 days.",
-    tags: ["High Match", "React", "TypeScript", "Urgent"],
-    priority: "high",
-    type: "application",
-    estimatedTime: "45 min",
-    reason: "95% skill match with your profile",
-  },
-  {
-    id: "rec-2",
-    title: "Connect with Sarah Chen on LinkedIn",
-    description:
-      "Senior Engineering Manager at Meta. You have 3 mutual connections and similar background.",
-    tags: ["Networking", "Meta", "Mutual Connections"],
-    priority: "medium",
-    type: "networking",
-    estimatedTime: "10 min",
-    reason: "Strategic networking opportunity",
-  },
-  {
-    id: "rec-3",
-    title: "Research Stripe's engineering culture",
-    description:
-      "Upcoming interview next week. Understand their values and recent tech initiatives.",
-    tags: ["Interview Prep", "Stripe", "Company Research"],
-    priority: "high",
-    type: "research",
-    estimatedTime: "30 min",
-    reason: "Interview scheduled for next week",
-  },
-  {
-    id: "rec-4",
-    title: "Update portfolio with recent projects",
-    description:
-      "Add your latest React dashboard and resume builder projects. 67% of your applied roles mention portfolio review.",
-    tags: ["Portfolio", "Projects", "Showcase"],
-    priority: "medium",
-    type: "application",
-    estimatedTime: "2 hours",
-    reason: "Requested in 67% of your applications",
-  },
-];
+// const mockRecommendations: RecommendedTask[] = [
+//   {
+//     id: "rec-1",
+//     title: "Apply to Microsoft Senior Developer role",
+//     description:
+//       "High-match position based on your React and TypeScript skills. Application deadline in 3 days.",
+//     tags: ["High Match", "React", "TypeScript", "Urgent"],
+//     priority: "high",
+//     type: "application",
+//     estimatedTime: "45 min",
+//     reason: "95% skill match with your profile",
+//   },
+//   {
+//     id: "rec-2",
+//     title: "Connect with Sarah Chen on LinkedIn",
+//     description:
+//       "Senior Engineering Manager at Meta. You have 3 mutual connections and similar background.",
+//     tags: ["Networking", "Meta", "Mutual Connections"],
+//     priority: "medium",
+//     type: "networking",
+//     estimatedTime: "10 min",
+//     reason: "Strategic networking opportunity",
+//   },
+//   {
+//     id: "rec-3",
+//     title: "Research Stripe's engineering culture",
+//     description:
+//       "Upcoming interview next week. Understand their values and recent tech initiatives.",
+//     tags: ["Interview Prep", "Stripe", "Company Research"],
+//     priority: "high",
+//     type: "research",
+//     estimatedTime: "30 min",
+//     reason: "Interview scheduled for next week",
+//   },
+//   {
+//     id: "rec-4",
+//     title: "Update portfolio with recent projects",
+//     description:
+//       "Add your latest React dashboard and resume builder projects. 67% of your applied roles mention portfolio review.",
+//     tags: ["Portfolio", "Projects", "Showcase"],
+//     priority: "medium",
+//     type: "application",
+//     estimatedTime: "2 hours",
+//     reason: "Requested in 67% of your applications",
+//   },
+// ];
 
 const typeIcons = {
   application: Briefcase,
@@ -92,10 +94,45 @@ const priorityColors = {
 };
 
 const RecommendedTasks = ({ onTaskAccepted }: RecommendedTasksProps) => {
-  const [recommendations, setRecommendations] =
-    useState<RecommendedTask[]>(mockRecommendations);
+  //const [recommendations, setRecommendations] =
+  //  useState<RecommendedTask[]>(mockRecommendations);
+  const [recommendations, setRecommendations] = useState<RecommendedTask[]>([]);
   const [snoozedTasks, setSnoozedTasks] = useState<Set<string>>(new Set());
-
+  useEffect(() => {
+    // fetch recommendations from Firestore
+    const fetchRecommendations = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        const token = await user.getIdToken();
+        try { 
+          const res = await fetch('http://localhost:8000/recommended-tasks',{
+            headers: {
+              'Authorization': `Bearer ${token}`,
+          },
+          });
+          if (!res.ok) {
+            console.error('Failed to fetch tasks:', await res.text());
+              return;
+      }
+      const data = await res.json();
+      // fix naming if needed:
+      const formatted: RecommendedTask[] = data.map((task: any) => ({ 
+        ...task,
+        estimatedTime: task.estimated_time, // adjust if needed
+      }));
+      setRecommendations(formatted);  
+    } catch (err){
+      console.error('Error fetching tasks:', err);
+      toast({
+        title: "Failed to load tasks",
+        description: "There was a problem connecting to the server. Please try again later.",
+        variant: "destructive",
+      });
+      }
+    }
+      };
+      fetchRecommendations();
+    }, []);
   const handleAcceptTask = (task: RecommendedTask) => {
     onTaskAccepted(task);
     setRecommendations((prev) => prev.filter((t) => t.id !== task.id));
