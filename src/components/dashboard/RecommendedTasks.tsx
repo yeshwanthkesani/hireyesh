@@ -32,53 +32,6 @@ interface RecommendedTasksProps {
   onTaskAccepted: (task: RecommendedTask) => void;
 }
 
-// const mockRecommendations: RecommendedTask[] = [
-//   {
-//     id: "rec-1",
-//     title: "Apply to Microsoft Senior Developer role",
-//     description:
-//       "High-match position based on your React and TypeScript skills. Application deadline in 3 days.",
-//     tags: ["High Match", "React", "TypeScript", "Urgent"],
-//     priority: "high",
-//     type: "application",
-//     estimatedTime: "45 min",
-//     reason: "95% skill match with your profile",
-//   },
-//   {
-//     id: "rec-2",
-//     title: "Connect with Sarah Chen on LinkedIn",
-//     description:
-//       "Senior Engineering Manager at Meta. You have 3 mutual connections and similar background.",
-//     tags: ["Networking", "Meta", "Mutual Connections"],
-//     priority: "medium",
-//     type: "networking",
-//     estimatedTime: "10 min",
-//     reason: "Strategic networking opportunity",
-//   },
-//   {
-//     id: "rec-3",
-//     title: "Research Stripe's engineering culture",
-//     description:
-//       "Upcoming interview next week. Understand their values and recent tech initiatives.",
-//     tags: ["Interview Prep", "Stripe", "Company Research"],
-//     priority: "high",
-//     type: "research",
-//     estimatedTime: "30 min",
-//     reason: "Interview scheduled for next week",
-//   },
-//   {
-//     id: "rec-4",
-//     title: "Update portfolio with recent projects",
-//     description:
-//       "Add your latest React dashboard and resume builder projects. 67% of your applied roles mention portfolio review.",
-//     tags: ["Portfolio", "Projects", "Showcase"],
-//     priority: "medium",
-//     type: "application",
-//     estimatedTime: "2 hours",
-//     reason: "Requested in 67% of your applications",
-//   },
-// ];
-
 const typeIcons = {
   application: Briefcase,
   interview: Users,
@@ -100,11 +53,11 @@ const RecommendedTasks = ({ onTaskAccepted }: RecommendedTasksProps) => {
   const [snoozedTasks, setSnoozedTasks] = useState<Set<string>>(new Set());
   useEffect(() => {
     // fetch recommendations from Firestore
-    const fetchRecommendations = async () => {
-      const user = auth.currentUser;
-      if (user) {
-        const token = await user.getIdToken();
-        try { 
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+
+      if (!user) return;
+      try {
+        const token = await user.getIdToken(); 
           const res = await fetch('http://localhost:8000/recommended-tasks',{
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -129,11 +82,22 @@ const RecommendedTasks = ({ onTaskAccepted }: RecommendedTasksProps) => {
         variant: "destructive",
       });
       }
-    }
-      };
-      fetchRecommendations();
+    });
+      return () => unsubscribe();
     }, []);
-  const handleAcceptTask = (task: RecommendedTask) => {
+  const handleAcceptTask = async (task: RecommendedTask) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try{
+      const token = await user.getIdToken();
+      await fetch("http://localhost:8000/tasks/accept", {
+        method:"POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ task_id: task.id})
+      });
     onTaskAccepted(task);
     setRecommendations((prev) => prev.filter((t) => t.id !== task.id));
 
@@ -142,23 +106,73 @@ const RecommendedTasks = ({ onTaskAccepted }: RecommendedTasksProps) => {
       description: `"${task.title}" has been added to your daily planner.`,
       className: "bg-success/10 border-success/20",
     });
+  } catch (error) {
+    console.error("Error accepting task:", error);
+    toast({
+      title: "Failed to accept task",
+      description: "There was a problem adding the task. Please try again later.",
+      variant: "destructive",
+    });
+  }
   };
 
-  const handleDismissTask = (taskId: string) => {
+  const handleDismissTask = async (taskId: string) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch("http://localhost:8000/tasks/dismiss", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({ task_id: taskId }),
+          });
+
     setRecommendations((prev) => prev.filter((t) => t.id !== taskId));
     toast({
       title: "Task dismissed",
       description: "The recommendation has been removed.",
     });
+  } catch (error) {
+    console.error("Error dismissing task:", error);
+    toast({
+      title: "Failed to dismiss task",
+      description: "There was a problem removing the task. Please try again later.",
+      variant: "destructive",
+    });
+  }
   };
 
-  const handleSnoozeTask = (taskId: string) => {
+  const handleSnoozeTask = async (taskId: string) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch("http://localhost:8000/tasks/snooze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ task_id: taskId }),
+      });
+    
     setSnoozedTasks((prev) => new Set([...prev, taskId]));
     setRecommendations((prev) => prev.filter((t) => t.id !== taskId));
     toast({
       title: "Task snoozed",
       description: "The recommendation will appear again tomorrow.",
     });
+  } catch (error) {
+    console.error("Error snoozing task:", error);
+    toast({
+      title: "Failed to snooze task",
+      description: "There was a problem snoozing the task. Please try again later.",
+      variant: "destructive",
+    });
+  }
   };
 
   if (recommendations.length === 0) {

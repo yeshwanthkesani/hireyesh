@@ -3,8 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, GoogleAuthProvider, GithubAuthProvider, signInWithEmailAndPassword, signInWithPopup, updateProfile } from "firebase/auth";
 import { auth } from "@/firebaseConfig"; // Adjust the import based on your firebase config file
+import { toast } from "@/hooks/use-toast";
 import {
   Eye,
   EyeOff,
@@ -75,10 +76,17 @@ const SignUp = () => {
 
     // Basic validation
     if (formData.password !== formData.confirmPassword) {
-      alert("Passwords don't match");
+      toast({ title: "Password Mismatch", description: "Passwords don't match.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
+    const termsCheckbox = document.getElementById("terms") as HTMLInputElement;
+    if (!termsCheckbox?.checked) {
+      toast({ title: "Terms Required", description: "You must agree to the Terms of Service.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+
 
     try {
     const userCredential = await createUserWithEmailAndPassword(
@@ -86,21 +94,36 @@ const SignUp = () => {
       formData.email,
       formData.password
     );
+    await updateProfile(userCredential.user, {displayName: `${formData.firstName} ${formData.lastName}`});
+    toast({ title: "Account Created", description: "You have successfully signed up.", variant: "default" });
     console.log("Signed up user:", userCredential.user);
     navigate("/dashboard");
     }
     catch (error: any) {
         console.error("Error signing up:", error);
-        alert(error.message);
+        toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
     };
 
-  const handleSocialSignUp = (provider: string) => {
-    console.log(`Signing up with ${provider}`);
-    // Implement social signup logic here
-    navigate("/dashboard");
+  const handleSocialSignUp = async (provider: "Google" | "Github" | "LinkedIn") => {
+    if (provider === "LinkedIn"){
+      toast({ title: "Not Implemented", description: "LinkedIn sign-up is not implemented yet.", variant: "default" });
+      return;
+    }
+    const authProvider = 
+    provider === "Google"
+    ? new GoogleAuthProvider()
+    : new GithubAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, authProvider);
+      console.log("Signed up user:", result.user);
+      navigate("/dashboard");
+  } catch (error: any){
+    console.error("Error signing up:", error);
+    toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
+  }
   };
 
   return (
@@ -410,7 +433,7 @@ const SignUp = () => {
               {/* GitHub */}
               <button
                 type="button"
-                onClick={() => handleSocialSignUp("GitHub")}
+                onClick={() => handleSocialSignUp("Github")}
                 className="w-14 h-14 bg-slate-800/50 border border-slate-700 rounded-full flex items-center justify-center transition-all duration-500 hover:bg-gray-900 hover:border-gray-900 hover:scale-110 shadow-lg hover:shadow-xl group"
               >
                 <svg

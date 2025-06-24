@@ -14,4 +14,6 @@ class RecommendedTask(Base):
     estimated_time = Column(String)
     reason = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="pending")
+
     

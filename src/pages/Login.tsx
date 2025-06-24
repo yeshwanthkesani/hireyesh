@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/firebaseConfig";
-
+import { GoogleAuthProvider, GithubAuthProvider, signInWithPopup } from "firebase/auth";
+import { toast } from "@/hooks/use-toast";
 import {
   Eye,
   EyeOff,
@@ -71,14 +72,46 @@ const Login = () => {
             navigate("/dashboard");
         } catch(error:any){
             console.error("Login error:", error.code, error.message);
-            alert(`Login Failed: ${error.code}`);
-            } finally{
-                setIsLoading(false);
-            }
+            let description = "An error occurred during login. Please try again.";
+            if (error.code === "auth/wrong-password") {
+              description = "Incorrect password. Please try again.";
+              } else if (error.code === "auth/user-not-found") {
+                description = "User not found. Please try again.";
+                }
+                toast({
+                  title: "Login Failed",
+                  description: description,
+                  variant: "destructive",
+                  });
+                }
+                
         
   };
 
-  const handleSocialLogin = (provider: string) => {
+  const handleSocialLogin = async (providerName: "Google" | "Github" | "LinkedIn") => {
+    if (providerName === "LinkedIn") {
+      toast({
+        title: "Coming Soon",
+        description: "LinkedIn login is not yet implemented.",
+        variant: "default",
+      });
+      return;
+    }
+    const provider = providerName === "Google"
+      ? new GoogleAuthProvider()
+      : new GithubAuthProvider();
+      try {
+        const result = await signInWithPopup(auth, provider);
+        console.log("User logged in:", result.user);
+        navigate("/dashboard");
+        } catch (error: any) {
+          console.error("Login error:", error.code, error.message);
+          toast({
+            title: "Login Failed",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
     console.log(`Logging in with ${provider}`);
     // Implement social login logic here
     navigate("/dashboard");
@@ -325,7 +358,7 @@ const Login = () => {
               {/* GitHub */}
               <button
                 type="button"
-                onClick={() => handleSocialLogin("GitHub")}
+                onClick={() => handleSocialLogin("Github")}
                 className="w-14 h-14 bg-slate-800/50 border border-slate-700 rounded-full flex items-center justify-center transition-all duration-500 hover:bg-gray-900 hover:border-gray-900 hover:scale-110 shadow-lg hover:shadow-xl group"
               >
                 <svg

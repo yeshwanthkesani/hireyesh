@@ -1,6 +1,6 @@
 import os
 from fastapi import Request, HTTPException
-from firebase_admin import credentials, initialize_app, auth
+from firebase_admin import credentials, auth, initialize_app
 from dotenv import load_dotenv
 
 load_dotenv(".env.backend")

@@ -11,6 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Calendar, Clock, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import RecommendedTasks from "./RecommendedTasks";
+import {useEffect} from "react";
+import { auth } from "@/firebaseConfig";
+import {toast} from "@/hooks/use-toast"
 
 interface Task {
   id: string;
@@ -20,6 +23,7 @@ interface Task {
   time?: string;
   completed: boolean;
   type: "application" | "interview" | "follow-up" | "research" | "networking";
+  status?: "accepted" | "completed" | "snoozed" | "dismissed"| 'pending';
 }
 
 interface RecommendedTask {
@@ -33,51 +37,51 @@ interface RecommendedTask {
   reason: string;
 }
 
-const initialTasks: Task[] = [
-  {
-    id: "1",
-    title: "Follow up with TechCorp",
-    description: "Send thank you email after yesterday's interview",
-    priority: "high",
-    time: "10:00 AM",
-    completed: false,
-    type: "follow-up",
-  },
-  {
-    id: "2",
-    title: "Complete application for Google",
-    description: "Software Engineer position - deadline today",
-    priority: "high",
-    time: "2:00 PM",
-    completed: false,
-    type: "application",
-  },
-  {
-    id: "3",
-    title: "Research startup companies",
-    description: "Find 5 potential companies in fintech space",
-    priority: "medium",
-    completed: false,
-    type: "research",
-  },
-  {
-    id: "4",
-    title: "Update LinkedIn profile",
-    description: "Add recent projects and skills",
-    priority: "low",
-    completed: true,
-    type: "networking",
-  },
-  {
-    id: "5",
-    title: "Prepare for Amazon interview",
-    description: "Review system design concepts",
-    priority: "high",
-    time: "Tomorrow 11:00 AM",
-    completed: false,
-    type: "interview",
-  },
-];
+// const initialTasks: Task[] = [
+//   {
+//     id: "1",
+//     title: "Follow up with TechCorp",
+//     description: "Send thank you email after yesterday's interview",
+//     priority: "high",
+//     time: "10:00 AM",
+//     completed: false,
+//     type: "follow-up",
+//   },
+//   {
+//     id: "2",
+//     title: "Complete application for Google",
+//     description: "Software Engineer position - deadline today",
+//     priority: "high",
+//     time: "2:00 PM",
+//     completed: false,
+//     type: "application",
+//   },
+//   {
+//     id: "3",
+//     title: "Research startup companies",
+//     description: "Find 5 potential companies in fintech space",
+//     priority: "medium",
+//     completed: false,
+//     type: "research",
+//   },
+//   {
+//     id: "4",
+//     title: "Update LinkedIn profile",
+//     description: "Add recent projects and skills",
+//     priority: "low",
+//     completed: true,
+//     type: "networking",
+//   },
+//   {
+//     id: "5",
+//     title: "Prepare for Amazon interview",
+//     description: "Review system design concepts",
+//     priority: "high",
+//     time: "Tomorrow 11:00 AM",
+//     completed: false,
+//     type: "interview",
+//   },
+// ];
 
 const priorityColors = {
   high: "bg-destructive/10 text-destructive border-destructive/20",
@@ -94,14 +98,73 @@ const typeColors = {
 };
 
 const DailyPlanner = () => {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged ( async(user) => { 
+      
+      if (!user) return;
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("http://localhost:8000/planner-tasks",{
+          headers:{
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error("Failed to fetch tasks");
+    }
+    const data = await response.json();
+    const formatted: Task[] = data.map((task: any) => ({
+          id: task.id,
+          title: task.title,
+          description: task.description || "",
+          priority: task.priority,
+          time: task.time,
+          completed: task.completed === "completed",
+          type: task.type,
+        }));
+        setTasks(formatted);
+      } catch (error) {
+        console.error("Error fetching planner tasks:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load tasks. Please try again later.",
+          variant: "destructive",
+        });
+      }
+    });
+    return () => unsubscribe();
+    }, []);
 
-  const toggleTask = (taskId: string) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === taskId ? { ...task, completed: !task.completed } : task,
-      ),
+  const toggleTask = async (taskId: string, completed: boolean) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`http://localhost:8000/tasks/complete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ task_id: taskId, completed }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to update task");
+      }
+    setTasks((prevTasks) =>
+      prevTasks.map((task) =>
+        task.id === taskId ? { ...task, completed } : task
+    )
     );
+    } catch (error) {
+      console.error("Error updating task:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update task. Please try again later.",
+        variant: "destructive",
+      });
+    }
   };
 
   const addTaskFromRecommendation = (recommendedTask: RecommendedTask) => {
@@ -157,7 +220,7 @@ const DailyPlanner = () => {
               >
                 <Checkbox
                   checked={task.completed}
-                  onCheckedChange={() => toggleTask(task.id)}
+                  onCheckedChange={(checked) => toggleTask(task.id, !!checked)}
                   className="mt-0.5"
                 />
                 <div className="flex-1 min-w-0">

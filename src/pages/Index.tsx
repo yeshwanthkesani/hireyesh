@@ -3,8 +3,10 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import JobStats from "@/components/dashboard/JobStats";
 import DailyPlanner from "@/components/dashboard/DailyPlanner";
 import QuickActions from "@/components/dashboard/QuickActions";
+import { useAuthGuard }   from "@/hooks/useAuthGuard";
 
 const Index = () => {
+  useAuthGuard();
   return (
     <div className="min-h-screen bg-background">
       <div className="flex">

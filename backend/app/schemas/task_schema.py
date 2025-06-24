@@ -12,6 +12,7 @@ class TaskOut(BaseModel):
     estimated_time: Optional[str]
     reason: str
     created_at: datetime # need to revert back
+    status: Optional[str] = "pending"  # Default status is 'pending'
 
     class Config:
         orm_mode = True
