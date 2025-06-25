@@ -16,13 +16,15 @@ def get_tasks(
     user_id: str = Depends(verify_firebase_token)
 ):
     tasks = db.query(RecommendedTask).filter_by(user_id=user_id).all()
+    if not tasks:
+        print(f"[INFO] No recommended tasks found for user: {user_id}")
     
     return [
         {
             "id": t.id,
             "title": t.title,
             "description": t.description,
-            "tags": t.tags,
+            "tags": t.tags or [],
             "priority": t.priority,
             "type": t.type,
             "estimated_time": t.estimated_time,

@@ -8,7 +8,7 @@ class RecommendedTask(Base):
     user_id = Column(String, index=True)  # Firebase user ID
     title = Column(String, nullable=False)
     description = Column(String)
-    tags = Column(ARRAY(String))
+    tags = Column(ARRAY(String), default =[])
     priority = Column(String)
     type = Column(String)
     estimated_time = Column(String)

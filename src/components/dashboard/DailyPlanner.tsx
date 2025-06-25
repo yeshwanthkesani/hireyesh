@@ -100,11 +100,17 @@ const typeColors = {
 const DailyPlanner = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged ( async(user) => { 
+    const fetchTasks = async() => {
+      const user =auth.currentUser 
       
-      if (!user) return;
+      if (!user) {
+        console.warn("User not authenticated yet. Retrying...");
+        setTimeout(fetchTasks, 500); // Retry in 500ms
+      return;
+      }
       try {
-        const token = await user.getIdToken();
+        const token = await user.getIdToken(true);
+        console.log("sending planner token", token);
         const response = await fetch("http://localhost:8000/planner-tasks",{
           headers:{
             Authorization: `Bearer ${token}`,
@@ -114,6 +120,7 @@ const DailyPlanner = () => {
           throw new Error("Failed to fetch tasks");
     }
     const data = await response.json();
+    console.log("Fetched data:", data);
     const formatted: Task[] = data.map((task: any) => ({
           id: task.id,
           title: task.title,
@@ -132,8 +139,8 @@ const DailyPlanner = () => {
           variant: "destructive",
         });
       }
-    });
-    return () => unsubscribe();
+    };
+    fetchTasks();
     }, []);
 
   const toggleTask = async (taskId: string, completed: boolean) => {

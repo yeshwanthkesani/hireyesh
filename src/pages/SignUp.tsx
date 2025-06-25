@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createUserWithEmailAndPassword, GoogleAuthProvider, GithubAuthProvider, signInWithEmailAndPassword, signInWithPopup, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, GoogleAuthProvider, GithubAuthProvider,EmailAuthProvider, signInWithEmailAndPassword, signInWithPopup, fetchSignInMethodsForEmail, linkWithCredential, updateProfile } from "firebase/auth";
 import { auth } from "@/firebaseConfig"; // Adjust the import based on your firebase config file
 import { toast } from "@/hooks/use-toast";
 import {
@@ -100,8 +100,12 @@ const SignUp = () => {
     navigate("/dashboard");
     }
     catch (error: any) {
-        console.error("Error signing up:", error);
+        if (error.code === "auth/email-already-in-use"){
+          toast({ title: "Email Already in Use", description: "try sigining in or use a different email.", variant: "destructive",});
+        } else{
         toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
+        }
+        console.error("Error signing up:", error);
     } finally {
       setIsLoading(false);
     }
@@ -119,12 +123,38 @@ const SignUp = () => {
     try {
       const result = await signInWithPopup(auth, authProvider);
       console.log("Signed up user:", result.user);
+      toast({title: "Signup Successful", description: `Welcome ${result.user.displayName || "User"}`, variant: "default"});
       navigate("/dashboard");
   } catch (error: any){
+    if (error.code ==="auth/account-exists-with-different-credential"){
+      const pendingCred = error.credential;
+      const email = error.customData?.email;
+      const methods = await fetchSignInMethodsForEmail(auth, email);
+      if (methods.includes("password")){
+        const password = prompt(`An account already exists with this email using a password. Please enter your password for ${email} to link your social login:`);
+        try{
+          const userCred = await signInWithEmailAndPassword(auth, email, password);
+          await linkWithCredential(userCred.user, pendingCred);
+          toast({title: "Accounts Linked", description: "you can now log in with Google/Github too." ,variant:"default"})
+          navigate("/dashboard");
+        }catch(linkErr: any){
+        console.error("Error Linking Credentials:", linkErr)
+        toast({title: "Error Linking Credentials", description: linkErr.message, variant: "destructive"});
+        }
+      } else{
+        toast({
+          title:"Sign-in method conflict",
+          description: `You have already signed up with: ${methods[0]}. Please use that method to login.`,
+          variant: "destructive"
+        });
+      } 
+
+    } else{
     console.error("Error signing up:", error);
     toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
   }
-  };
+  }
+};
 
   return (
     <div

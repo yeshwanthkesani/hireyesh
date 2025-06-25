@@ -53,21 +53,37 @@ const RecommendedTasks = ({ onTaskAccepted }: RecommendedTasksProps) => {
   const [snoozedTasks, setSnoozedTasks] = useState<Set<string>>(new Set());
   useEffect(() => {
     // fetch recommendations from Firestore
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+    const fetchRecommendations = async () => {
+      const user = auth.currentUser;
 
-      if (!user) return;
+
+      if (!user) {
+        console.warn("User not authenticated. Retrying...")
+        setTimeout(fetchRecommendations, 500);
+        return;
+      } 
       try {
-        const token = await user.getIdToken(); 
+        const token = await user.getIdToken(true); 
           const res = await fetch('http://localhost:8000/recommended-tasks',{
             headers: {
               'Authorization': `Bearer ${token}`,
           },
           });
           if (!res.ok) {
-            console.error('Failed to fetch tasks:', await res.text());
+            const errorText = await res.text();
+            throw new Error(`Backend error: ${res.status} - ${errorText}`);
               return;
       }
       const data = await res.json();
+      if (data.length=== 0){
+        toast({
+          title: 'No tasks found',
+          description:"We'll recomend tasks soon based on your profile.",
+          variant: "default"
+        });
+        setRecommendations([]);
+        return;
+      }
       // fix naming if needed:
       const formatted: RecommendedTask[] = data.map((task: any) => ({ 
         ...task,
@@ -82,14 +98,15 @@ const RecommendedTasks = ({ onTaskAccepted }: RecommendedTasksProps) => {
         variant: "destructive",
       });
       }
-    });
-      return () => unsubscribe();
+    };
+      fetchRecommendations();
     }, []);
   const handleAcceptTask = async (task: RecommendedTask) => {
     const user = auth.currentUser;
     if (!user) return;
     try{
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(true);
+      console.log("sending token", token);
       await fetch("http://localhost:8000/tasks/accept", {
         method:"POST",
         headers: {
@@ -176,7 +193,11 @@ const RecommendedTasks = ({ onTaskAccepted }: RecommendedTasksProps) => {
   };
 
   if (recommendations.length === 0) {
-    return null;
+    return (
+    <Card className="mb-6 text-center text-yellow-800 bg-yellow-50 border border-yellow-200 p-6">
+      <p>No AI recommendations yet. Try updating your resume or completing tasks!</p>
+    </Card>
+    );
   }
 
   return (
@@ -225,7 +246,7 @@ const RecommendedTasks = ({ onTaskAccepted }: RecommendedTasksProps) => {
 
                   {/* Tags */}
                   <div className="flex flex-wrap gap-1">
-                    {task.tags.map((tag) => (
+                    {(task.tags || []).map((tag) => (
                       <Badge
                         key={tag}
                         variant="secondary"

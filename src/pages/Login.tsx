@@ -3,10 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { fetchSignInMethodsForEmail, linkWithCredential, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/firebaseConfig";
 import { GoogleAuthProvider, GithubAuthProvider, signInWithPopup } from "firebase/auth";
 import { toast } from "@/hooks/use-toast";
+import { sendPasswordResetEmail } from "firebase/auth";
 import {
   Eye,
   EyeOff,
@@ -66,6 +67,27 @@ const Login = () => {
     setIsLoading(true);
 
     try{
+      // Check if the email exist with other providers
+      //const methods = await fetchSignInMethodsForEmail(auth, email);
+      const methods = await fetchSignInMethodsForEmail(auth, email.trim().toLowerCase());
+      console.log("Fetched methods:", methods)
+      
+      if (!methods.includes("password")){
+        console.log("Available sign-in methods:", methods);
+        let providerHint = "another provider";
+        if (methods.includes("google.com")) providerHint = "Google";
+        else if (methods.includes("github.com")) providerHint = "GitHub";
+        else if (methods.includes("facebook.com")) providerHint = "Facebook";
+        toast({
+          title: "Login Failed",
+          description: `This email is registered via ${providerHint}. Please log in using that provider.`,
+          variant: "destructive",
+
+        });
+        setIsLoading(false);
+        return;
+      }
+      // Try logging in only if 'password' method is supported
         const userCredential = await signInWithEmailAndPassword(
           auth,email, password);
           console.log("User logged in:", userCredential.user);
@@ -74,27 +96,59 @@ const Login = () => {
             console.error("Login error:", error.code, error.message);
             let description = "An error occurred during login. Please try again.";
             if (error.code === "auth/wrong-password") {
-              description = "Incorrect password. Please try again.";
+              description = "Incorrect password. This email may be linked to a Google or GitHub account. Try logging in with those.";
               } else if (error.code === "auth/user-not-found") {
-                description = "User not found. Please try again.";
+                description = "No account found with this email. Try signing up or checking the provider used.";
                 }
                 toast({
                   title: "Login Failed",
                   description: description,
                   variant: "destructive",
                   });
+                  setIsLoading(false);
                 }
                 
         
   };
+  const handleForgotPassword = async() =>{
+    if(!email){
+      toast({
+        title:"Enter Email",
+        description: "Please enter your email address to reset your password",
+        variant:"destructive"
+        });
+        return;
+    }
+    try{
+      await sendPasswordResetEmail(auth, email);
+      toast({
+        title: "Password Reset Email Sent",
+        description: "Check your email for a password reset link",
+        variant: "default",
+        });
+  } catch(error: any){
+    toast({
+      title: "Error Sending Password Reset Email",
+      description: error.message,
+      variant: "destructive",
+      
+    });
+    }
+  };
+
+  const [popupInProgress, setPopupInProgress] = useState(false);
 
   const handleSocialLogin = async (providerName: "Google" | "Github" | "LinkedIn") => {
+    if (popupInProgress) return;
+    setPopupInProgress(true);
+
     if (providerName === "LinkedIn") {
       toast({
         title: "Coming Soon",
         description: "LinkedIn login is not yet implemented.",
         variant: "default",
       });
+      setPopupInProgress(false);
       return;
     }
     const provider = providerName === "Google"
@@ -102,20 +156,104 @@ const Login = () => {
       : new GithubAuthProvider();
       try {
         const result = await signInWithPopup(auth, provider);
-        console.log("User logged in:", result.user);
-        navigate("/dashboard");
+        // Get signed-in user email
+        const email = result.user?.email;
+        if(!email){
+          await auth.signOut();
+          toast({
+            title: "Login Failed", 
+            description: "No Email returned",
+            variant:"destructive"
+            });
+            return;
+        }
+        // const methods = await fetchSignInMethodsForEmail(auth, email);
+        // // only allow if provider matches
+        // const expectedProvider = providerName === "Google" ? "google.com" : "github.com";
+        // if (!methods.includes(expectedProvider)){
+        //   await auth.signOut();
+        //   toast({
+        //     title: "Login Failed",
+        //     description:`This account is registered with ${methods[0]}. Please use that provider.`,
+        //     variant: "destructive",
+        //     });
+        //     return;
+        // }
+        toast({
+          title: "login Successful",
+          description:`Welcome ${result.user.displayName||"User"}`,
+          variant: "default",
+        });
+        navigate("/dashboard");     
         } catch (error: any) {
+          if (error.code === "auth/account-exists-with-different-credential"){
+            const pendingCred = error.credential;
+            const email = error.customData?.email;
+            if (!email){
+              toast({
+                title: "Email Missing",
+                description: "Could not retrive email from provider.",
+                variant: "destructive",
+              });
+              return;
+            }
+            const methods = await fetchSignInMethodsForEmail(auth, email);
+            if (methods.includes("password")){
+              const password = prompt(
+                `An account with this email exists using password. Enter your password to link your ${providerName} login:`
+                );
+                if (password) {
+                  try{
+                    const userCred = await signInWithEmailAndPassword(auth, email, password);
+                    await linkWithCredential(userCred.user, pendingCred);
+                    toast({
+                      title:"Account Linked",
+                      description: `Your ${providerName} login has been linked to your account.`,
+                      variant: "default",
+                    });
+                    navigate("/dashboard");
+                  } catch(linkErr: any){
+                    toast({
+                      title: "linking Failed",
+                      description: linkErr.message,
+                      variant: "destructive",
+                    });
+                  }
+                  } else {
+                    toast({
+                      title: "Linking Cancelled",
+                      description: `Please Sign in using: ${methods[0]}`,
+                      variant: "destructive",
+                    });
+                    }
+                    } else{
+                      toast({
+                        title: "Account Exists with Different Method",
+                        description: `Please sign in using: ${methods[0]}`,
+                        variant: "destructive",
+                      });
+                    }
+                  } else if(error.code === "auth/cancelled-popup-request"){
+                    toast({
+                      title: "Login Cancelled",
+                      description: "You cancelled the login request.",
+                      variant: "destructive",
+                      });
+                  }
+                  else{
           console.error("Login error:", error.code, error.message);
           toast({
             title: "Login Failed",
             description: error.message,
             variant: "destructive",
           });
-        }
-    console.log(`Logging in with ${provider}`);
-    // Implement social login logic here
-    navigate("/dashboard");
-  };
+        } 
+      
+      } finally{
+        setPopupInProgress(false)
+      }
+    };
+   
 
   return (
     <div
@@ -294,12 +432,14 @@ const Login = () => {
                     Remember me
                   </Label>
                 </div>
-                <Link
-                  to="/forgot-password"
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
                   className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
                 >
                   Forgot password?
-                </Link>
+                </button>
+
               </div>
 
               <Button
